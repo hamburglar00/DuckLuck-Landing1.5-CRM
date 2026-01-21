@@ -43,7 +43,6 @@
   <div class="container background-image">
     <div class="overlay"></div>
     <div class="content">
-      <!-- ✅ Tamaño del logo: SOLO CSS (sin width/height) -->
       <img src="imagenes/logo.png" class="logo" alt="Logo GERAGANAMOS"
            decoding="async" fetchpriority="high" />
 
@@ -134,8 +133,12 @@ function showRedirectOverlay(text){
   if (tx) tx.textContent = text || LANDING_CONFIG.UI.OVERLAY_TEXT || "Redirigiendo al Whatsapp del Cajero...";
   if (ov) ov.hidden = false;
 }
+
+/* ✅ FIX: hide que también resetea texto */
 function hideRedirectOverlay(){
   const ov = document.getElementById("wa-redirect-overlay");
+  const tx = document.getElementById("wa-redirect-text");
+  if (tx) tx.textContent = LANDING_CONFIG.UI.OVERLAY_TEXT || "Redirigiendo al Whatsapp del Cajero...";
   if (ov) ov.hidden = true;
 }
 
@@ -235,11 +238,10 @@ function buildMensaje(botName, promo_code){
 }
 
 /**
- * ✅ Flujo:
- * 1) Número fijo
- * 2) Pixel Contact (NO frena)
- * 3) GEO FRONT + POST a /api/xz3v2q (tiempo controlado)
- * 4) Redirigir a WhatsApp
+ * ✅ Misma lógica del overlay:
+ * - se muestra al click
+ * - apenas tengo el número (acá es fijo), lo oculto para que no quede pegado al volver (bfcache)
+ * - y además lo reseteo en pageshow/visibilitychange
  */
 async function contactarWhatsApp({ source="main_button", customText=null } = {}){
   if (window.__waInFlight) return;
@@ -254,6 +256,9 @@ async function contactarWhatsApp({ source="main_button", customText=null } = {})
     alert("Número de WhatsApp inválido en STATIC_NUMBER");
     return;
   }
+
+  // ✅ FIX: como el número ya está, oculto overlay YA (antes de geo/post/pixel)
+  hideRedirectOverlay();
 
   const external_id = getOrCreateExternalId();
   const event_id = generateUUID();
@@ -308,7 +313,6 @@ async function contactarWhatsApp({ source="main_button", customText=null } = {})
     source,
     brand: LANDING_CONFIG.BRAND_NAME,
 
-    // ✅ geo correcta desde frontend
     geo_city: geo.city || "",
     geo_region: geo.region || "",
     geo_country: geo.country || ""
@@ -365,6 +369,16 @@ document.addEventListener("DOMContentLoaded",()=>{
 
   if (sendBtn) sendBtn.addEventListener("click", sendFromBubble);
   if (input) input.addEventListener("keydown", (e)=>{ if(e.key==="Enter") sendFromBubble(); });
+
+  // ✅ FIX: al volver desde WhatsApp (bfcache), ocultar overlay y liberar estado
+  function resetAfterReturn(){
+    hideRedirectOverlay();
+    window.__waInFlight = false;
+  }
+  window.addEventListener("pageshow", resetAfterReturn);
+  window.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") resetAfterReturn();
+  });
 
   // ✅ Auto redirect (registra evento y redirige)
   if (LANDING_CONFIG.UI.AUTO_REDIRECT_ENABLED) {
